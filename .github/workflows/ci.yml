@@ -97,31 +97,16 @@ jobs:
           cmake --build build --parallel 2
           cmake --build build --target "$PACKAGE_TARGET" --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error
-      - name: Record build environment
+      - name: Test release tooling and prepare versioned assets
         shell: bash
         run: |
-          uv run --no-project --python 3.12 - <<'PY'
-          import json, pathlib
-          info = json.loads(pathlib.Path('build/build-info.json').read_text())
-          target = pathlib.Path('build/packages') / ('build-info-' + info['platform'] + '.json')
-          target.write_text(json.dumps(info, indent=2) + '\n')
-          PY
-      - name: Write package checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd build/packages
-          shopt -s nullglob
-          packages=(*.zip)
-          test "${#packages[@]}" -gt 0
-          for package in "${packages[@]}"; do sha256sum "$package" > "$package.sha256"; done
+          uv run --no-project --python 3.12 -m unittest discover -s tests -p test_release.py
+          uv run --no-project --python 3.12 scripts/release.py prepare \
+            --manifest sekai/extension.json --build-info build/build-info.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: extension-${{ matrix.platform }}
-          path: |
-            build/packages/*.zip
-            build/packages/*.sha256
-            build/packages/build-info-*.json
+          path: build/release/*
           if-no-files-found: error
 
   release:
@@ -132,21 +117,28 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Check release version
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          test "$TAG" = "v$(jq -r .version sekai/extension.json)"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: extension-*
           path: dist
           merge-multiple: true
+      - name: Verify complete release and write checksums
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.12 scripts/release.py finalize \
+            --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag "$TAG"
+          uv run --no-project --python 3.12 scripts/release.py verify \
+            --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag "$TAG"
+          (cd dist && sha256sum -c SHA256SUMS.txt)
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          RELEASE_NAME: Project SEKAI 扩展
         run: |
           set -euo pipefail
-          (cd dist && sha256sum -c ./*.sha256)
-          gh release create "$TAG" dist/* --verify-tag --generate-notes --draft
+          gh release create "$TAG" dist/* --verify-tag --title "$RELEASE_NAME $TAG" \
+            --notes-file RELEASE_NOTES.md --generate-notes --draft

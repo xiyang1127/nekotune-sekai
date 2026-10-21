@@ -35,3 +35,6 @@ ZIP 在 build/packages/；挂载 build/extensions/nekotune.sekai/ 调试。
 
 CI 使用模拟网络和凭据，不登录真实账号。Windows MSYS2 包会滚动更新，
 Qt 小版本不符合当前基线时明确失败；升级宿主时同步更新 SDK 配置并验收。
+
+
+安装包、构建信息及校验文件的统一命名与复现命令见 [发布规范](RELEASING.md)。本次更新见 [发行说明](RELEASE_NOTES.md)。

@@ -2,3 +2,5 @@
 /.nekotune-sdk/
 /.cache/
 *.log
+__pycache__/
+/dist/
