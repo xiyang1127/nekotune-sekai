@@ -6,7 +6,7 @@
 ## 安装
 
 从 [Actions](https://github.com/xiyang1127/nekotune-sekai/actions) 下载对应平台的 ZIP，
-或从 Releases 下载已验收的 .nekotune.zip，在 NekoTune「扩展」中导入并确认信任。
+或从 Releases 下载已验收的 `<插件ID>-<版本>-linux.zip` 或 `windows.zip`，在 NekoTune「扩展」中导入并确认信任。
 升级导入新包后确认替换，已有 ID、配置和数据保持不变。
 
 ## 构建与调试
@@ -29,7 +29,7 @@ ZIP 在 build/packages/；挂载 build/extensions/nekotune.sekai/ 调试。
 ## CI 与发布
 
 提交或 PR 自动运行 Linux/Windows 构建、离线协议测试、中英翻译校验、
-共享库加载与反复激活／停用测试，并提供 ZIP、SHA-256 和构建信息。
+共享库加载与反复激活／停用测试，并提供短文件名 ZIP 和 SHA-256 校验文件，构建信息仅记录于 CI 日志。
 更新 sekai/extension.json 的版本后推送同版本的 v<version> 标签，
 自动创建草稿 Release。实际安装、更新与真实播放验收后再公开。
 
@@ -37,4 +37,4 @@ CI 使用模拟网络和凭据，不登录真实账号。Windows MSYS2 包会滚
 Qt 小版本不符合当前基线时明确失败；升级宿主时同步更新 SDK 配置并验收。
 
 
-安装包、构建信息及校验文件的统一命名与复现命令见 [发布规范](RELEASING.md)。本次更新见 [发行说明](RELEASE_NOTES.md)。
+安装包及校验文件的统一命名与复现命令见 [发布规范](RELEASING.md)。本次更新见 [发行说明](RELEASE_NOTES.md)。

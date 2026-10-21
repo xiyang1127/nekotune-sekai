@@ -5,11 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import subprocess
 import zipfile
 
 
@@ -59,11 +57,15 @@ def inspect_package(path: Path, source: dict) -> tuple[str, dict]:
 
 def asset_stem(manifest: dict, platform: str) -> str:
     extension_id, version = identity(manifest)
-    return f"{extension_id}-{version}-{platform}"
+    if platform == "any":
+        return f"{extension_id}-{version}"
+    require(platform in {"linux-x86_64", "windows-x86_64"},
+            "Short platform names currently support x86_64 builds only")
+    return f"{extension_id}-{version}-{platform.split('-')[0]}"
 
 
 def package_suffix(manifest: dict) -> str:
-    return ".nktheme.zip" if manifest.get("type") == "theme" else ".nekotune.zip"
+    return ".zip"
 
 
 def prepare(manifest_path: Path, packages: Path, output: Path, build_info: Path | None) -> None:
@@ -79,50 +81,29 @@ def prepare(manifest_path: Path, packages: Path, output: Path, build_info: Path 
         require(".".join(metadata["qt"].split(".")[:2]) == packaged["qt"], "Qt build information mismatch")
         if "platform" in metadata:
             require(metadata["platform"] == platform, "Build platform mismatch")
+        print(f"Build environment: Qt {metadata['qt']}, "
+              f"{metadata['compiler']} {metadata['compilerVersion']}, {platform}")
     require(not output.exists() or not any(output.iterdir()), "Release output must be empty")
     output.mkdir(parents=True, exist_ok=True)
     stem = asset_stem(manifest, platform)
     filename = stem + package_suffix(manifest)
     shutil.copyfile(archives[0], output / filename)
-    commit = os.environ.get("GITHUB_SHA") or subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], text=True
-    ).strip()
-    metadata.update({"id": manifest["id"], "version": manifest["version"],
-                     "apiVersion": manifest["apiVersion"], "platform": platform,
-                     "sourceCommit": commit, "package": filename})
-    (output / f"{stem}.build-info.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
     print(f"Prepared {filename}")
 
 
 def validate_assets(manifest: dict, directory: Path, platforms: list[str], tag: str | None) -> list[Path]:
-    extension_id, version = identity(manifest)
+    _, version = identity(manifest)
     require(tag is None or tag == f"v{version}", "Release tag does not match manifest version")
     require(len(platforms) == len(set(platforms)), "Duplicate expected platforms")
     require(platforms == ["any"] if manifest.get("type") == "theme" else "any" not in platforms,
             "Incorrect platform selection")
     assets: list[Path] = []
-    commits = set()
     for platform in platforms:
         stem = asset_stem(manifest, platform)
         package = directory / (stem + package_suffix(manifest))
-        info = directory / f"{stem}.build-info.json"
-        actual_platform, packaged = inspect_package(package, manifest)
+        actual_platform, _ = inspect_package(package, manifest)
         require(actual_platform == platform, "Package platform differs from filename")
-        metadata = read_json(info)
-        require((metadata.get("id"), metadata.get("version"), metadata.get("platform"))
-                == (extension_id, version, platform), "Build information identity mismatch")
-        require(metadata.get("package") == package.name, "Build information package mismatch")
-        require(metadata.get("apiVersion") == manifest["apiVersion"], "Build information API mismatch")
-        require(bool(re.fullmatch(r"[0-9a-f]{40}", metadata.get("sourceCommit", ""))), "Invalid source commit")
-        if platform != "any":
-            require(all(metadata.get(key) for key in ("qt", "compiler", "compilerVersion")),
-                    "Incomplete native build information")
-            require(".".join(metadata["qt"].split(".")[:2]) == packaged["qt"], "Qt metadata mismatch")
-        commits.add(metadata["sourceCommit"])
-        assets.extend((package, info))
-    require(len(commits) == 1, "Platform builds came from different commits")
+        assets.append(package)
     expected = {p.name for p in assets} | {"SHA256SUMS.txt"}
     require(all(p.is_file() and p.name in expected for p in directory.iterdir()), "Unexpected release asset")
     return sorted(assets)
