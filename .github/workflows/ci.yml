@@ -1,0 +1,152 @@
+name: Build and release
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-2022
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QUICK_BACKEND: software
+      PACKAGE_TARGET: extension_package
+    steps:
+      - name: Preserve source line endings for platform-independent packages
+        shell: bash
+        run: git config --global core.autocrlf false
+      # In a reusable workflow, checkout selects the calling community repository.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - name: Read pinned SDK environment
+        id: sdk
+        shell: bash
+        run: |
+          uv run --no-project --python 3.12 - <<'PY'
+          import json, os, pathlib
+          info = json.loads(pathlib.Path('nekotune-sdk.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key in ('repository', 'ref', 'qt', 'gcc'):
+                  output.write(f'{key}={info[key]}\n')
+          PY
+      - name: Fetch SDK headers and CMake tools only
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: ${{ steps.sdk.outputs.repository }}
+          ref: ${{ steps.sdk.outputs.ref }}
+          path: .nekotune-sdk
+          sparse-checkout: sdk
+          persist-credentials: false
+      - name: Install Linux compiler and dependencies
+        if: runner.os == 'Linux'
+        env:
+          GCC_MAJOR: ${{ steps.sdk.outputs.gcc }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y "g++-$GCC_MAJOR" ninja-build zlib1g-dev libgl1-mesa-dev ffmpeg
+          echo "CXX=g++-$GCC_MAJOR" >> "$GITHUB_ENV"
+      - name: Install Linux Qt matching the host
+        if: runner.os == 'Linux'
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4
+        with:
+          version: ${{ steps.sdk.outputs.qt }}
+          cache: true
+      - name: Install Windows UCRT64 build dependencies
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: UCRT64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-ffmpeg
+      - name: Build and test on Linux
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON
+          cmake --build build --parallel 2
+          cmake --build build --target "$PACKAGE_TARGET" --parallel 2
+          ctest --test-dir build --output-on-failure --no-tests=error
+      - name: Build and test on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON
+          cmake --build build --parallel 2
+          cmake --build build --target "$PACKAGE_TARGET" --parallel 2
+          ctest --test-dir build --output-on-failure --no-tests=error
+      - name: Record build environment
+        shell: bash
+        run: |
+          uv run --no-project --python 3.12 - <<'PY'
+          import json, pathlib
+          info = json.loads(pathlib.Path('build/build-info.json').read_text())
+          target = pathlib.Path('build/packages') / ('build-info-' + info['platform'] + '.json')
+          target.write_text(json.dumps(info, indent=2) + '\n')
+          PY
+      - name: Write package checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build/packages
+          shopt -s nullglob
+          packages=(*.zip)
+          test "${#packages[@]}" -gt 0
+          for package in "${packages[@]}"; do sha256sum "$package" > "$package.sha256"; done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: extension-${{ matrix.platform }}
+          path: |
+            build/packages/*.zip
+            build/packages/*.sha256
+            build/packages/build-info-*.json
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Check release version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$TAG" = "v$(jq -r .version sekai/extension.json)"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: extension-*
+          path: dist
+          merge-multiple: true
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c ./*.sha256)
+          gh release create "$TAG" dist/* --verify-tag --generate-notes --draft

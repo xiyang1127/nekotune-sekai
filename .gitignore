@@ -1,0 +1,4 @@
+/build*/
+/.nekotune-sdk/
+/.cache/
+*.log

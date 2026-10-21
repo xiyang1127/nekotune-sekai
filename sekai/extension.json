@@ -1,0 +1,36 @@
+{
+  "id": "nekotune.sekai",
+  "name": "Project SEKAI",
+  "version": "2.0.0",
+  "apiVersion": 2,
+  "description": "基于 sekai-music 的五区歌曲与演唱版本浏览、搜索、播放及下载。",
+  "config": {
+    "region": "jp",
+    "format": "mp3",
+    "length": "long",
+    "fallback_jp": true,
+    "trim_downloads": true
+  },
+  "contributes": {
+    "pages": [
+      {
+        "id": "music",
+        "title": {
+          "zh": "世界计划",
+          "en": "Project SEKAI"
+        },
+        "source": "qml/Page.qml"
+      }
+    ],
+    "settings": [
+      {
+        "id": "settings",
+        "title": {
+          "zh": "世界计划设置",
+          "en": "Project SEKAI settings"
+        },
+        "source": "qml/SettingsPage.qml"
+      }
+    ]
+  }
+}
