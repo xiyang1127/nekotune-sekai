@@ -23,6 +23,8 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       QT_QUICK_BACKEND: software
       PACKAGE_TARGET: extension_package
+      SDK_TAG: v2.0.0
+      SDK_REPOSITORY: yang208115/NekoTune
     steps:
       - name: Preserve source line endings for platform-independent packages
         shell: bash
@@ -30,25 +32,48 @@ jobs:
       # In a reusable workflow, checkout selects the calling community repository.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-      - name: Read pinned SDK environment
+      - name: Download SDK for the selected host release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SDK_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Set repository variable NEKOTUNE_SDK_TAG to a host release tag containing SDK assets."
+            exit 1
+          fi
+          asset="NekoTuneSDK-${SDK_TAG#v}-$PLATFORM-x64.zip"
+          gh release download "$SDK_TAG" --repo "$SDK_REPOSITORY" \
+            --pattern "$asset" --pattern "$asset.sha256" --dir "$RUNNER_TEMP/nekotune-sdk-download"
+      - name: Verify SDK and read build environment
         id: sdk
         shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
           uv run --no-project --python 3.12 - <<'PY'
-          import json, os, pathlib
-          info = json.loads(pathlib.Path('nekotune-sdk.json').read_text())
+          import hashlib, json, os, pathlib, re, zipfile
+          downloads = pathlib.Path(os.environ['RUNNER_TEMP']) / 'nekotune-sdk-download'
+          archive, = downloads.glob('*.zip')
+          expected = archive.with_suffix('.zip.sha256').read_text().split()[0]
+          with archive.open('rb') as stream:
+              actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+          if actual != expected:
+              raise SystemExit('SDK checksum verification failed')
+          sdk = pathlib.Path(os.environ['RUNNER_TEMP']) / 'nekotune-sdk'
+          with zipfile.ZipFile(archive) as package:
+              package.extractall(sdk)
+          info = json.loads((sdk / 'share/NekoTuneSDK/build-info.json').read_text())
+          if info['compiler'] != 'GNU' or not re.fullmatch(r'\d+', info['compilerMajor']):
+              raise SystemExit('This workflow supports the official GCC/MinGW SDKs')
+          if not re.fullmatch(r'\d+\.\d+\.\d+', info['qt']):
+              raise SystemExit('Invalid SDK Qt version')
+          if info['system'].lower() != os.environ['PLATFORM']:
+              raise SystemExit('SDK platform mismatch')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              for key in ('repository', 'ref', 'qt', 'gcc'):
-                  output.write(f'{key}={info[key]}\n')
+              output.write(f"qt={info['qt']}\ngcc={info['compilerMajor']}\nprefix={sdk.as_posix()}\n")
           PY
-      - name: Fetch SDK headers and CMake tools only
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: ${{ steps.sdk.outputs.repository }}
-          ref: ${{ steps.sdk.outputs.ref }}
-          path: .nekotune-sdk
-          sparse-checkout: sdk
-          persist-credentials: false
       - name: Install Linux compiler and dependencies
         if: runner.os == 'Linux'
         env:
@@ -83,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON
+            "-DCMAKE_PREFIX_PATH=${{ steps.sdk.outputs.prefix }};$QT_ROOT_DIR" -DBUILD_TESTING=ON
           cmake --build build --parallel 2
           cmake --build build --target "$PACKAGE_TARGET" --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error
@@ -93,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON
+            "-DCMAKE_PREFIX_PATH=${{ steps.sdk.outputs.prefix }}" -DBUILD_TESTING=ON
           cmake --build build --parallel 2
           cmake --build build --target "$PACKAGE_TARGET" --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error

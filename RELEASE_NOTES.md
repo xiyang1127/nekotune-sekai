@@ -6,4 +6,4 @@
 
 安装：下载对应系统的 ZIP，在 NekoTune「扩展」中导入。`SHA256SUMS.txt` 无需导入。
 
-兼容性：需要提供 SDK 3 的宿主；SDK 2.x 宿主无法加载此版本。Linux 使用 Ubuntu 24.04 / GCC 13 / Qt 6.11.2；Windows 使用 MSYS2 UCRT64。插件 Qt 小版本和编译器 ABI 必须与宿主兼容。
+兼容性：需要提供 SDK 3 的宿主；SDK 2.x 宿主无法加载此版本。Linux 使用 Ubuntu 24.04 / GCC 13 / Qt 6.11.2；Windows 使用 MSYS2 UCRT64 / GCC 16 / Qt 6.12.0。插件 Qt 小版本和编译器 ABI 必须与宿主兼容。

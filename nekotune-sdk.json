@@ -3,5 +3,8 @@
   "ref": "f7c089859f5f41349a4f2d74b99cdc12d494c8c0",
   "qt": "6.11.2",
   "gcc": "13",
-  "apiVersion": 3
+  "apiVersion": 3,
+  "release": "v2.0.0",
+  "windowsQt": "6.12.0",
+  "windowsGcc": "16"
 }

@@ -12,7 +12,7 @@
 ## 构建与调试
 
 需要 CMake 3.28+、Ninja、C++20、Qt Core / Network / Qml / Test，酷狗另需 zlib。
-Linux CI 使用 Ubuntu 24.04 / GCC 13 / Qt 6.11.2；Windows 使用 MSYS2 UCRT64。
+Linux CI 使用 Ubuntu 24.04 / GCC 13 / Qt 6.11.2；Windows 使用 MSYS2 UCRT64 / GCC 16 / Qt 6.12.0。
 原生插件的 Qt 小版本、编译器工具链需要与宿主对应。
 
 SDK 固定版本见 nekotune-sdk.json；CI 只取该版本的 sdk/，不编译宿主。
