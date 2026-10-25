@@ -264,7 +264,7 @@ void SekaiTest::activationMigratesSetup() {
     QCOMPARE(context.call("status").value().value("master_url").toString(), recommendedUrls.value("master_url").toString());
     QVERIFY(context.published("status"));
     extension.close();
-    QVERIFY(context.music.isEmpty() && context.services.isEmpty());
+    QVERIFY(context.musicProviders.isEmpty() && context.serviceHandlers.isEmpty());
 }
 void SekaiTest::leadingSilenceRules() {
     QCOMPARE(leadingSilence("silence_start: 0\nsilence_end: 8", 12), 7.97);

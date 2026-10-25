@@ -27,9 +27,9 @@ uv run --no-project --python 3.12 scripts/release.py prepare --manifest sekai/ex
 
 ```sh
 uv run --no-project --python 3.12 scripts/release.py finalize \
-  --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag v2.0.1
+  --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag v3.0.0
 uv run --no-project --python 3.12 scripts/release.py verify \
-  --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag v2.0.1
+  --manifest sekai/extension.json --output dist --platforms linux-x86_64 windows-x86_64 --tag v3.0.0
 cd dist
 sha256sum -c SHA256SUMS.txt
 ```

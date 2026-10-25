@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
             return 1;
         }
         plugin->deactivate();
-        if (!context.services.isEmpty() || !context.commands.isEmpty()
-            || !context.music.isEmpty() || !context.lyrics.isEmpty() || !context.listeners.empty()) {
+        if (!context.serviceHandlers.isEmpty() || !context.commandHandlers.isEmpty()
+            || !context.musicProviders.isEmpty() || !context.lyricsProviders.isEmpty() || !context.listeners.empty()) {
             qCritical() << "Registrations remain after deactivation on cycle" << cycle;
             return 1;
         }

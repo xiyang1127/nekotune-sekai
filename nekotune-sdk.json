@@ -1,7 +1,7 @@
 {
   "repository": "yang208115/NekoTune",
-  "ref": "858b71e6880c74ec33c1202815f3ffd7995dadf6",
+  "ref": "f7c089859f5f41349a4f2d74b99cdc12d494c8c0",
   "qt": "6.11.2",
   "gcc": "13",
-  "apiVersion": 2
+  "apiVersion": 3
 }

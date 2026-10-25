@@ -9,7 +9,7 @@ class SekaiPlugin final : public QObject, public sdk::IExtensionPlugin {
     Q_PLUGIN_METADATA(IID NEKOTUNE_EXTENSION_IID)
     Q_INTERFACES(nekotune::sdk::IExtensionPlugin)
   public:
-    void activate(sdk::IExtensionContext &context, std::function<void(Result<void>)> done) override {
+    void activate(sdk::ExtensionContext &context, sdk::Done done) override {
         m_transport = std::make_unique<ext::NetworkTransport>();
         m_extension = std::make_unique<sekai::Extension>(context, *m_transport);
         m_extension->activate(std::move(done));

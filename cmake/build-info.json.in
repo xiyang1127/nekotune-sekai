@@ -3,5 +3,5 @@
   "qt": "@Qt6_VERSION@",
   "compiler": "@CMAKE_CXX_COMPILER_ID@",
   "compilerVersion": "@CMAKE_CXX_COMPILER_VERSION@",
-  "sdkRevision": "858b71e6880c74ec33c1202815f3ffd7995dadf6"
+  "sdkRevision": "f7c089859f5f41349a4f2d74b99cdc12d494c8c0"
 }

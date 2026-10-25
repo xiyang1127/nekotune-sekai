@@ -1,8 +1,8 @@
 {
   "id": "nekotune.sekai",
   "name": "Project SEKAI",
-  "version": "2.0.1",
-  "apiVersion": 2,
+  "version": "3.0.0",
+  "apiVersion": 3,
   "description": "基于 sekai-music 的五区歌曲与演唱版本浏览、搜索、播放及下载。",
   "config": {
     "region": "jp",

@@ -33,12 +33,12 @@ class Music final : public sdk::IMusicProvider {
             done(result ? Result<sdk::Track>(toTrack(result.value())) : Result<sdk::Track>(result.error()));
         });
     }
-    void resolve(const QString &id, const QString &purpose, std::function<void(Result<sdk::ResolvedAudio>)> done) override {
+    void resolve(const QString &id, sdk::ResolvePurpose purpose, std::function<void(Result<sdk::ResolvedAudio>)> done) override {
         auto &provider = *m_extension.m_provider;
         provider.resolve(id, [this, &provider, id, purpose, done](Result<QVariantMap> audio) {
             if (!audio)
                 return done(audio.error());
-            if (purpose != "download" || !provider.config().trimDownloads)
+            if (purpose != sdk::ResolvePurpose::Download || !provider.config().trimDownloads)
                 return done(toAudio(audio.value()));
             provider.rawTrack(id, [this, audio = audio.value(), done](Result<MusicTrack> track) {
                 if (!track)
@@ -57,7 +57,7 @@ class Music final : public sdk::IMusicProvider {
         m_extension.m_provider->downloaded(
             id, path,
             [&context, songId](std::function<void(std::optional<bool>)> answer) {
-                context.hostCall("song.metadata", {{"song_id", songId}}, [answer](Result<sdk::Params> metadata) {
+                context.host().call("song.metadata", {{"song_id", songId}}, [answer](Result<sdk::Params> metadata) {
                     if (!metadata)
                         return answer(std::nullopt);
                     answer(!metadata.value().value("lyrics").toString().trimmed().isEmpty());
@@ -79,7 +79,7 @@ class Music final : public sdk::IMusicProvider {
     Extension &m_extension;
 };
 
-Extension::Extension(sdk::IExtensionContext &context, ext::HttpTransport &transport) : m_context(context), m_transport(transport) {}
+Extension::Extension(sdk::ExtensionContext &context, ext::HttpTransport &transport) : m_context(context), m_transport(transport) {}
 Extension::~Extension() { close(); }
 void Extension::close() {
     if (m_closed)
@@ -96,23 +96,23 @@ void Extension::reset() {
         m_provider->close();
         m_retired.push_back(std::move(m_provider));
     }
-    const auto config = configuration(m_context.config());
+    const auto config = configuration(m_context.config().get());
     m_provider = std::make_unique<Provider>(config ? config.value() : Configuration{}, m_transport);
 }
 void Extension::service(const QString &id, sdk::Handler handler) {
-    m_registrations.push_back(m_context.registerService(id, std::move(handler)));
+    m_registrations.push_back(m_context.services().add(id, std::move(handler)));
 }
 void Extension::activate(std::function<void(Result<void>)> done) {
-    const auto config = configuration(m_context.config());
+    const auto config = configuration(m_context.config().get());
     if (!config)
         return done(config.error());
     auto start = [this, config = config.value(), done] {
         m_provider = std::make_unique<Provider>(config, m_transport);
-        m_downloads = std::make_unique<DownloadPreparer>(QDir(m_context.dataDirectory()).filePath("audio-preparation"),
-                                                         [this](const QString &message) { m_context.log(QtInfoMsg, message); });
+        m_downloads = std::make_unique<DownloadPreparer>(QDir(m_context.info().dataDirectory).filePath("audio-preparation"),
+                                                         [this](const QString &message) { m_context.log().write(QtInfoMsg, message); });
         m_music = std::make_unique<Music>(*this);
         m_registrations.push_back(
-            m_context.registerMusicProvider("music", m_music.get(), {{"name", "Project SEKAI"}, {"download", true}, {"page", "music"}}));
+            m_context.music().add("music", m_music.get(), {.name = "Project SEKAI", .download = true, .page = "music"}));
         service("status", [this](const sdk::Params &, sdk::Reply reply) { reply(m_provider->config().toMap()); });
         service("defaults", [](const sdk::Params &, sdk::Reply reply) { reply(recommendedUrls); });
         service("config.set", [this](const sdk::Params &params, sdk::Reply reply) {
@@ -120,11 +120,11 @@ void Extension::activate(std::function<void(Result<void>)> done) {
             if (!next)
                 return reply(next.error());
             const auto map = next.value().toMap();
-            m_context.updateConfig(map, [this, map, reply](Result<void> saved) {
+            m_context.config().update(map, [this, map, reply](Result<void> saved) {
                 if (!saved)
                     return reply(saved.error());
                 reset();
-                m_context.publish("status", map);
+                m_context.events().publish("status", map);
                 reply(map);
             });
         });
@@ -133,18 +133,18 @@ void Extension::activate(std::function<void(Result<void>)> done) {
             reset();
             reply(sdk::Params{{"cleared", true}});
         });
-        m_registrations.push_back(m_context.on("extension.config_changed", [this](const sdk::Params &) {
+        m_registrations.push_back(m_context.events().on("extension.config_changed", [this](const sdk::Params &) {
             if (m_closed)
                 return;
             reset();
-            m_context.publish("status", m_provider->config().toMap());
+            m_context.events().publish("status", m_provider->config().toMap());
         }));
         done({});
     };
     // Upgrade the initial setup gate while retaining any custom mirrors and audio preferences.
-    if (config.value().toMap() == m_context.config())
+    if (config.value().toMap() == m_context.config().get())
         return start();
-    m_context.updateConfig(config.value().toMap(), [start, done](Result<void> saved) {
+    m_context.config().update(config.value().toMap(), [start, done](Result<void> saved) {
         if (!saved)
             return done(saved);
         start();
